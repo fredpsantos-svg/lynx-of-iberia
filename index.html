@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lynx of Iberia</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Nunito:wght@600;800&family=Source+Serif+4:opsz,wght@8..60,500;8..60,600&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#241c14;--paper:#f4ecd6;--maquis:#3d4f34;--cork:#8b5a2b;--terra:#c45c26;--gold:#c9a227;--sage:#7d9a6a;--marsh:#4a7c74;--slate:#5c6b73;--card:#fff8e8}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:radial-gradient(1200px 600px at 20% 0%,#efe3c4,#e4d3aa 40%,#d9c49a);color:var(--ink);font-family:Nunito,sans-serif}
+button{font:inherit;cursor:pointer}
+button:disabled{cursor:not-allowed;opacity:.5}
+#app{max-width:1100px;margin:0 auto;padding:16px 16px 40px}
+.screen{background:var(--card);border:1px solid #d8c49a;border-radius:22px;padding:28px;box-shadow:0 16px 40px rgba(60,40,10,.12)}
+h1,h2,h3{font-family:Fraunces,serif;margin:0 0 .4em}
+.lede{font-family:"Source Serif 4",serif;font-size:1.15rem;line-height:1.45;max-width:42rem}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.btn{background:var(--maquis);color:#f7f1e1;border:0;border-radius:999px;padding:12px 22px;font-weight:800}
+.btn.gold{background:var(--terra)}
+.btn.ghost{background:transparent;color:var(--ink);border:2px solid #cbb78a}
+.muted{opacity:.72}
+.pips{display:flex;gap:6px}
+.pip{width:12px;height:12px;border-radius:50%;background:#cbb78a}
+.pip.on{background:var(--terra)}
+.grid{display:grid;grid-template-columns:1.15fr .85fr;gap:16px}
+@media(max-width:860px){.grid{grid-template-columns:1fr}}
+.zone{stroke:#241c14;stroke-width:1.2;cursor:pointer;transition:filter .15s}
+.zone:hover{filter:brightness(1.08)}
+.zone.sel{stroke:var(--gold);stroke-width:3}
+.zone.claimed{stroke:#7a4e12;stroke-width:2.4}
+.meter{height:10px;background:#ead9b4;border-radius:99px;overflow:hidden;display:flex}
+.meter>i{display:block;height:100%;background:var(--sage);flex:1;margin-right:2px;opacity:.22}
+.meter>i.f{opacity:1}
+.cards{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+@media(max-width:860px){.cards{grid-template-columns:1fr 1fr}}
+.act{border:2px solid #d8c49a;background:#fffaf0;border-radius:16px;padding:10px;text-align:left;min-height:92px}
+.act.on{border-color:var(--terra);background:#fde7d2}
+.act b{display:block}
+.eco{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin:12px 0}
+@media(max-width:860px){.eco{grid-template-columns:repeat(3,1fr)}}
+.eco .c{background:#fffaf0;border:1px solid #e2d2ad;border-radius:14px;padding:8px;font-size:.82rem}
+.badge{display:inline-block;background:#efe0b8;border-radius:99px;padding:2px 8px;font-size:.75rem;font-weight:800}
+.lock{opacity:.45;filter:grayscale(.8)}
+.report li{margin:.4rem 0}
+.hint{background:#efe6c8;border-radius:12px;padding:10px 12px;font-size:.92rem}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const SEASONS=[
+{t:1,s:"Spring",y:1},{t:2,s:"Summer",y:1},{t:3,s:"Autumn",y:1},{t:4,s:"Winter",y:1},
+{t:5,s:"Spring",y:2},{t:6,s:"Summer",y:2},{t:7,s:"Autumn",y:2},{t:8,s:"Winter",y:2}
+];
+const Z={
+donana:{id:"donana",name:"Doñana",gloss:"marshes of the southwest",col:"#5b8f7a",n:["morena","guadiana"],base:{food:70,water:90,cover:45,pred:55},rumour:"Water everywhere. Open ground. Eagles hunt here."},
+morena:{id:"morena",name:"Sierra Morena",gloss:"oak forest and maquis",col:"#4a6b46",n:["donana","dehesa","toledo","guadiana"],base:{food:75,water:55,cover:90,pred:35},rumour:"The lynx heartland. Dense cover, good rabbits."},
+dehesa:{id:"dehesa",name:"Extremadura dehesa",gloss:"oak parkland",col:"#c4a35a",n:["morena","guadiana","toledo","central"],base:{food:65,water:45,cover:50,pred:50},rumour:"Golden oaks. Many deer and boar. Dry summers."},
+toledo:{id:"toledo",name:"Montes de Toledo",gloss:"central hills",col:"#7a8f54",n:["morena","dehesa","central"],base:{food:60,water:50,cover:80,pred:40},rumour:"Hills and scrub. A natural next range."},
+guadiana:{id:"guadiana",name:"Vale do Guadiana",gloss:"Portugal river valley",col:"#6a9aa0",n:["donana","morena","dehesa"],base:{food:55,water:75,cover:60,pred:40},rumour:"River water. Rabbits still recovering."},
+central:{id:"central",name:"Sistema Central",gloss:"northern mountains",col:"#7d8b9a",n:["dehesa","toledo"],base:{food:30,water:70,cover:70,pred:80},rumour:"Wolf country. Few rabbits. A hard place for lynx."}
+};
+const IDS=Object.keys(Z);
+function clamp(n,a,b){return Math.max(a,Math.min(b,Math.round(n)))}
+function word(n){return n<25?"Scarce":n<45?"Low":n<65?"Fair":n<80?"Plenty":"Abundant"}
+function rng(s){let x=s|0;return()=>{x=x+0x6D2B79F5|0;let t=Math.imul(x^x>>>15,1|x);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+function tot(L){return IDS.reduce((a,id)=>a+(L[id].a+L[id].y+L[id].k),0)}
+function known(G,id){return G.claimed[id]|| (G.scout[id]>0)}
+function newGame(){
+ const seed=(Math.random()*1e9)|0, R=rng(seed);
+ const zones={};
+ IDS.forEach(id=>{
+  const b=Z[id].base;
+  zones[id]={rabbits:b.food, water:b.water, cover:b.cover, pred:b.pred,
+   wolves:id==="central"?85:id==="toledo"?15:id==="dehesa"?10:5,
+   deer:id==="dehesa"?80:id==="central"?75:id==="toledo"?60:id==="morena"?50:id==="guadiana"?35:20,
+   boar:id==="dehesa"?70:id==="central"?60:id==="morena"?55:50,
+   foxes:id==="donana"?60:id==="dehesa"?55:45,
+   eagles:id==="donana"?80:id==="dehesa"?70:id==="morena"?50:id==="central"?20:40};
+  if(id==="central") zones[id].rabbits=22;
+  if(id==="guadiana") zones[id].rabbits=48;
+ });
+ const lynx={}; IDS.forEach(id=>lynx[id]={a:0,y:0,k:0}); lynx.morena={a:3,y:1,k:0};
+ return {phase:"title",turn:1,pts:3,seed,R,sel:"morena",pending:null,acts:[],claimed:{morena:true},scout:{morena:8},zones,lynx,prep:0,kittensRaised:0,report:null};
+}
+let G=newGame();
+const COST={scout:1,conserve:1,breed:2,expand:2,relocate:1};
+function neighborsClaimed(id){return Z[id].n.some(n=>G.claimed[n])}
+function richestAdults(){
+ let best=null,n=0; IDS.forEach(id=>{if(G.claimed[id]&&G.lynx[id].a>n){n=G.lynx[id].a;best=id}}); return best;
+}
+function applyClimate(z,s){
+ if(s==="Spring"){z.water=clamp(z.water+12,0,100); z.cover=clamp(z.cover+6,0,100); z.rabbits=clamp(z.rabbits+8,0,100)}
+ if(s==="Summer"){z.water=clamp(z.water-22,0,100); z.cover=clamp(z.cover-8,0,100)}
+ if(s==="Autumn"){z.water=clamp(z.water+8,0,100); z.deer=clamp(z.deer+6,0,100); z.boar=clamp(z.boar+6,0,100)}
+ if(s==="Winter"){z.rabbits=clamp(z.rabbits-8,0,100); z.pred=clamp(z.pred+4,0,100)}
+}
+function events(snaps,s){
+ const out=[]; const r=G.R;
+ if(s==="Summer"&&r()<.45){const id=IDS.filter(i=>G.zones[i].water<60)[0]||"dehesa"; G.zones[id].water=clamp(G.zones[id].water-24,0,100); out.push("Drought drinks the ponds of "+Z[id].name+".")}
+ if(s==="Summer"&&r()<.28){const id=r()<.5?"dehesa":"morena"; G.zones[id].cover=clamp(G.zones[id].cover-18,0,100); G.zones[id].rabbits=clamp(G.zones[id].rabbits-12,0,100); out.push("Fire runs through the dry scrub of "+Z[id].name+".")}
+ if((s==="Spring"||s==="Autumn")&&r()<.32){const id=r()<.5?"donana":"guadiana"; G.zones[id].rabbits=clamp(G.zones[id].rabbits-28,0,100); out.push("A rabbit sickness moves through the warrens of "+Z[id].name+".")}
+ if(s==="Spring"&&r()<.35){G.zones.donana.water=clamp(G.zones.donana.water+10,0,100); out.push("Spring floods spread across Doñana. Water is high, cover is messy.")}
+ if(r()<.3){const id=IDS[(r()*6)|0]; G.zones[id].boar=clamp(G.zones[id].boar+10,0,100); G.zones[id].rabbits=clamp(G.zones[id].rabbits-10,0,100); out.push("Wild boar tear open warrens in "+Z[id].name+".")}
+ if(r()<.25){IDS.forEach(id=>{if(G.zones[id].eagles>40)G.zones[id].eagles=clamp(G.zones[id].eagles+8,0,100)}); out.push("Imperial eagles raise chicks and hunt more rabbits.")}
+ if(r()<.22){G.zones.toledo.wolves=clamp(G.zones.toledo.wolves+18,0,100); G.zones.central.wolves=clamp(G.zones.central.wolves+6,0,100); out.push("Wolves are heard moving south from the Sistema Central.")}
+ if(r()<.28){const id=G.claimed.morena?"morena":IDS[1]; G.zones[id].rabbits=clamp(G.zones[id].rabbits+16,0,100); out.push("Good rains. Grass thickens and rabbits rise in "+Z[id].name+".")}
+ if(!out.length) out.push("A quiet season. The maquis holds.");
+ return out.slice(0,2);
+}
+function resolve(){
+ const S=SEASONS[G.turn-1]; const lines={land:[],lynx:[],prey:[],nb:[],ev:[]};
+ const acts=G.acts.slice();
+ acts.forEach(a=>{
+  if(a.t==="scout"){G.scout[a.z]=(G.scout[a.z]||0)+2; lines.land.push("You scout "+Z[a.z].name+". Hidden trails and warrens become clear.")}
+  if(a.t==="conserve"){G.zones[a.z].rabbits=clamp(G.zones[a.z].rabbits+14,0,100); G.zones[a.z].foxes=clamp(G.zones[a.z].foxes-8,0,100); G.zones[a.z].cover=clamp(G.zones[a.z].cover+4,0,100); lines.prey.push("Warrens are mended in "+Z[a.z].name+". Rabbits breathe.")}
+  if(a.t==="breed"){G.prep+=1; lines.lynx.push("The family is given dens, quiet, and extra hunts.")}
+  if(a.t==="expand"){
+   const src=richestAdults();
+   let loss=false;
+   if(!src||G.lynx[src].a<2){lines.lynx.push("No spare adult could walk to "+Z[a.z].name+"."); return}
+   const risk=(known(G,a.z)?0.12:0.28)+(S.s==="Summer"?0.1:0)+(Z[a.z].base.cover<50?0.1:0);
+   G.lynx[src].a-=1;
+   if(G.R()<risk){loss=true; lines.lynx.push("An adult tried to reach "+Z[a.z].name+" and was lost on the open ground.")}
+   else {G.claimed[a.z]=true; G.lynx[a.z].a+=1; G.scout[a.z]=(G.scout[a.z]||0)+1; lines.lynx.push("A new range is claimed: "+Z[a.z].name+". One adult holds it.")}
+  }
+  if(a.t==="relocate"){
+   const src=IDS.find(id=>G.claimed[id]&&(G.lynx[id].y+G.lynx[id].k)>0);
+   if(!src||!G.claimed[a.z]){lines.lynx.push("No juvenile could be moved."); return}
+   const kind=G.lynx[src].y>0?"y":"k";
+   const risk=(S.s==="Autumn"?0.08:S.s==="Winter"?0.28:0.16)+(known(G,a.z)?0:0.12);
+   G.lynx[src][kind]-=1;
+   if(G.R()<risk) lines.lynx.push("A young lynx was lost while travelling.");
+   else {G.lynx[a.z][kind]+=1; lines.lynx.push("A young lynx reaches "+Z[a.z].name+".")}
+  }
+ });
+ lines.ev=events(G,S.s);
+ IDS.forEach(id=>applyClimate(G.zones[id],S.s));
+ IDS.forEach(id=>{
+  const z=G.zones[id]; const L=G.lynx[id];
+  const eat=L.a*7+L.y*4+L.k*2 + z.foxes*0.22 + z.eagles*0.18 + z.boar*0.05;
+  z.rabbits=clamp(z.rabbits - eat*0.18 + (S.s==="Spring"?10:0) + (z.water+z.cover)*0.04, 0, 100);
+  z.deer=clamp(z.deer - z.wolves*0.06 + 2, 5, 100);
+  z.boar=clamp(z.boar - z.wolves*0.04 + 1, 5, 100);
+  z.pred=clamp((z.foxes+z.eagles+z.wolves)/2.2, 0, 100);
+ });
+ IDS.forEach(id=>{
+  const z=G.zones[id], L=G.lynx[id]; const n=L.a+L.y+L.k; if(!n) return;
+  const starve = z.rabbits<28 ? 0.45 : z.rabbits<45 ? 0.18 : 0.04;
+  const kitRisk = (z.cover<40?0.28:0.08) + z.foxes/400 + z.eagles/500;
+  const wolf = z.wolves>50 ? 0.16 : 0;
+  function hit(k,p){let c=0; for(let i=0;i<L[k];i++) if(G.R()<p) c++; L[k]-=c; return c}
+  const sa=hit("a",starve+wolf), sy=hit("y",starve+0.05), sk=hit("k",starve+kitRisk+(S.s==="Summer"?0.08:0));
+  if(sa) lines.lynx.push((sa===1?"An adult":"Adults")+" in "+Z[id].name+" did not last the season.");
+  if(sk) lines.lynx.push(sk+" kitten"+(sk>1?"s":"")+" lost in "+Z[id].name+". Cover and foxes matter.");
+  if(sy) lines.lynx.push("A yearling was lost in "+Z[id].name+".");
+ });
+ if(S.s==="Spring"){
+  IDS.forEach(id=>{
+   const z=G.zones[id], L=G.lynx[id];
+   if(!G.claimed[id]||L.a<2) return;
+   if(z.rabbits<45||z.cover<40){lines.lynx.push("In "+Z[id].name+" the females will not raise young — rabbits or cover are too low."); return}
+   let k=1+(G.R()<.7?1:0)+(G.R()<.35?1:0);
+   if(G.prep&&z.rabbits>=60) k+=1;
+   k=Math.min(4,k); L.k+=k; G.kittensRaised+=k;
+   lines.lynx.push(k+" kitten"+(k>1?"s":"")+" born in "+Z[id].name+".");
+  });
+  G.prep=0;
+ }
+ if(S.s==="Winter"){
+  IDS.forEach(id=>{const L=G.lynx[id]; L.a+=L.y; L.y=L.k; L.k=0});
+  lines.lynx.push("Winter ages the family: kittens become yearlings, yearlings become adults.");
+ }
+ IDS.forEach(id=>{if(G.scout[id]>0) G.scout[id]--});
+ const rabbits=Math.round(IDS.reduce((a,id)=>a+G.zones[id].rabbits,0)/6);
+ lines.prey.push("Across Iberia, rabbits are "+word(rabbits).toLowerCase()+".");
+ lines.nb.push("Foxes, eagles, deer, boar and wolves keep shifting the board. You do not command them.");
+ G.report=lines;
+ G.acts=[]; G.pts=3; G.pending=null;
+ if(tot(G.lynx)<=0){G.phase="end"; G.win=false; return}
+ if(G.turn>=8){G.phase="end"; G.win=true; return}
+ G.turn+=1; G.phase="report";
+}
+function spend(t,z){
+ const c=COST[t]; if(G.pts<c) return;
+ if(t==="scout"&&!z) {G.pending="scout"; return}
+ if(t==="conserve"){z=z||G.sel; if(!G.claimed[z]&&!known(G,z)) return;}
+ if(t==="expand"){ if(!z){G.pending="expand"; return} if(G.claimed[z]||!neighborsClaimed(z)) return;}
+ if(t==="relocate"){ if(!z){G.pending="relocate"; return} if(!G.claimed[z]) return;
+  if(!IDS.some(id=>G.claimed[id]&&(G.lynx[id].y+G.lynx[id].k)>0)) return;}
+ if(t==="breed"&&!IDS.some(id=>G.claimed[id]&&G.lynx[id].a>=2)) return;
+ G.acts.push({t,z}); G.pts-=c; G.pending=null; draw();
+}
+function undo(){ if(!G.acts.length) return; const a=G.acts.pop(); G.pts+=COST[a.t]; G.pending=null; draw();}
+function meter(n){const f=Math.round(n/20); let h="<div class='meter'>"; for(let i=0;i<5;i++) h+="<i class='"+(i<f?"f":"")+"'></i>"; return h+"</div>"}
+function mapSvg(){
+ const P={
+  central:"M 110,28 L 250,22 L 300,70 L 240,108 L 150,112 L 90,78 Z",
+  toledo:"M 150,112 L 240,108 L 265,165 L 190,188 L 140,160 Z",
+  dehesa:"M 48,90 L 110,28 L 90,78 L 150,112 L 140,160 L 70,190 L 40,150 Z",
+  morena:"M 140,160 L 190,188 L 265,165 L 250,230 L 150,248 L 110,210 Z",
+  guadiana:"M 40,150 L 70,190 L 140,160 L 110,210 L 70,250 L 36,210 Z",
+  donana:"M 70,250 L 110,210 L 150,248 L 145,300 L 90,308 L 60,280 Z"
+ };
+ let s='<svg viewBox="0 0 340 330" style="width:100%;background:#d5e0d4;border-radius:18px">';
+ s+='<text x="18" y="24" font-size="11" fill="#3d4f34" font-family="Nunito">Atlantic</text>';
+ s+='<text x="250" y="40" font-size="11" fill="#3d4f34" font-family="Nunito">Mediterranean</text>';
+ IDS.forEach(id=>{
+  const k=known(G,id), cl=['zone', G.sel===id?'sel':'', G.claimed[id]?'claimed':''].join(' ');
+  const L=G.lynx[id]; const n=L.a+L.y+L.k;
+  s+=`<path class="${cl}" data-id="${id}" d="${P[id]}" fill="${Z[id].col}" opacity="${k?0.95:0.7}"/>`;
+  if(n) s+=`<text x="${id==='central'?180:id==='donana'?100:id==='guadiana'?70:id==='dehesa'?80:id==='toledo'?195:180}" y="${id==='central'?70:id==='donana'?275:id==='guadiana'?200:id==='dehesa'?130:id==='toledo'?150:205}" text-anchor="middle" font-size="13" font-weight="800" fill="#fff">${n}</text>`;
+ });
+ s+='</svg>'; return s;
+}
+function draw(){
+ const el=document.getElementById('app');
+ if(G.phase==='title'){
+  el.innerHTML=`<div class="screen"><span class="badge">Iberian Peninsula</span><h1>Lynx of Iberia</h1><p class="lede">Eight seasons to survive. You do not move the cats one by one. You spend plans on the land, then the season unfolds.</p><p class="muted">Prototype species: Iberian lynx only.</p><div class="row" style="margin-top:18px"><button class="btn gold" id="go">Begin</button></div></div>`;
+  el.querySelector('#go').onclick=()=>{G.phase='species';draw()}; return;
+ }
+ if(G.phase==='species'){
+  el.innerHTML=`<div class="screen"><h2>Choose a people of Iberia</h2><p class="lede">Only the Iberian lynx is ready in this prototype.</p><div class="row" style="margin-top:16px">
+   <button class="act" id="pick" style="min-width:240px"><b>Iberian lynx</b>Playable. Rabbit hunter. Needs cover and quiet dens.</button>
+   <div class="act lock"><b>Iberian wolf</b>Locked</div>
+   <div class="act lock"><b>Spanish imperial eagle</b>Locked</div>
+  </div></div>`;
+  el.querySelector('#pick').onclick=()=>{G.phase='howto';draw()}; return;
+ }
+ if(G.phase==='howto'){
+  el.innerHTML=`<div class="screen"><h2>How the land is played</h2><ol class="lede">
+  <li>Each turn is one season. Last eight seasons with the family still alive.</li>
+  <li>You get three strategy points. Spend them on scouting, saving rabbits, breeding, expanding, or moving young.</li>
+  <li>You never click an animal to walk it. The season decides hunts, births, and losses.</li>
+  <li>Lynx eat almost only rabbits. If warrens crash, the family starves. Females will not raise kittens without enough rabbits and cover.</li>
+  <li>Sistema Central is wolf country. Doñana is wet but open. Sierra Morena is home.</li>
+  </ol><button class="btn gold" id="go">To the peninsula</button></div>`;
+  el.querySelector('#go').onclick=()=>{G.phase='plan';draw()}; return;
+ }
+ if(G.phase==='report'||G.phase==='end'){
+  const r=G.report||{land:[],lynx:[],prey:[],nb:[],ev:[]};
+  const n=tot(G.lynx);
+  const rank=n>=13?"Flourishing":n>=8?"Recovering":n>=4?"Survived":n>=1?"Hanging on":"Extinct";
+  el.innerHTML=`<div class="screen"><h2>${G.phase==='end'?(G.win?"Eight seasons held":"The last lynx is gone"):SEASONS[Math.max(0,G.turn-2)].s+" has turned"}</h2>
+  ${G.phase==='end'?`<p class="lede"><b>${rank}.</b> ${n} lynx remain. Kittens raised: ${G.kittensRaised}. Territories: ${IDS.filter(id=>G.claimed[id]).length}.</p>`:''}
+  <h3>What the land did</h3><ul class="report">${(r.ev.concat(r.land)).map(x=>'<li>'+x+'</li>').join('')||'<li>The hills were still.</li>'}</ul>
+  <h3>Lynx families</h3><ul class="report">${r.lynx.map(x=>'<li>'+x+'</li>').join('')||'<li>The family held.</li>'}</ul>
+  <h3>Prey and water</h3><ul class="report">${r.prey.map(x=>'<li>'+x+'</li>').join('')}</ul>
+  <h3>Neighbours</h3><ul class="report">${r.nb.map(x=>'<li>'+x+'</li>').join('')}</ul>
+  <div class="row" style="margin-top:16px">${G.phase==='end'?`<button class="btn gold" id="again">Play again</button>`:`<button class="btn gold" id="go">Next season</button>`}</div></div>`;
+  const b=el.querySelector('#go'); if(b) b.onclick=()=>{G.phase='plan';draw()};
+  const a=el.querySelector('#again'); if(a) a.onclick=()=>{G=newGame();G.phase='plan';draw()}; return;
+ }
+ const S=SEASONS[G.turn-1], zid=G.sel, z=G.zones[zid], L=G.lynx[zid], kn=known(G,zid);
+ const avg=k=>Math.round(IDS.reduce((a,id)=>a+G.zones[id][k],0)/6);
+ const eco=[['Rabbits','rabbits'],['Wolves','wolves'],['Deer','deer'],['Boar','boar'],['Foxes','foxes'],['Eagles','eagles']];
+ el.innerHTML=`<div class="screen">
+ <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap">
+  <div><div class="badge">Turn ${G.turn} / 8</div><h2>${S.s}, Year ${S.y}</h2></div>
+  <div>Lynx <b>${tot(G.lynx)}</b><div class="pips" title="points">${[0,1,2].map(i=>`<i class="pip ${i<G.pts?'on':''}"></i>`).join('')}</div><small>${G.pts} strategy points</small></div>
+ </div>
+ <p class="hint">${S.s==='Spring'?'Breeding season. Kittens only come if a claimed range has two adults, enough rabbits, and cover.':S.s==='Summer'?'Heat and drought. Water falls. Young lynx suffer in the open.':S.s==='Autumn'?'Rains return. The safest time to move young.': 'Hard hunting. At the end of winter, kittens grow into yearlings.'}</p>
+ <div class="eco">${eco.map(([n,k])=>`<div class="c"><b>${n}</b><div>${word(avg(k))}</div></div>`).join('')}</div>
+ <div class="grid">
+  <div id="map">${mapSvg()}<p class="muted" style="font-size:.85rem">Click a coloured range. Gold outline is selected. Dark outline is claimed. Number is lynx.</p></div>
+  <div>
+   <h3>${Z[zid].name}</h3>
+   <p class="muted">${Z[zid].gloss}. ${kn? 'You know this range.': Z[zid].rumour}</p>
+   <p>Rabbits ${kn?word(z.rabbits):'?' } ${kn?meter(z.rabbits):''}</p>
+   <p>Water ${kn?word(z.water):'?'} ${kn?meter(z.water):''}</p>
+   <p>Cover ${kn?word(z.cover):'?'} ${kn?meter(z.cover):''}</p>
+   <p>Danger ${kn?word(z.pred):'?'} ${kn?meter(z.pred):''}</p>
+   <p>Lynx: ${L.a} adults, ${L.y} yearlings, ${L.k} kittens ${G.claimed[zid]?'<span class="badge">claimed</span>':''}</p>
+   ${kn?`<p class="muted">Foxes ${word(z.foxes)} · Eagles ${word(z.eagles)} · Wolves ${word(z.wolves)} · Deer ${word(z.deer)} · Boar ${word(z.boar)}</p>`:'<p class="muted">Scout to see rivals clearly.</p>'}
+   ${G.pending?`<p class="hint">Choose a range on the map for <b>${G.pending}</b>.</p>`:''}
+  </div>
+ </div>
+ <h3 style="margin-top:14px">Plans</h3>
+ <div class="cards">
+  <button class="act" data-t="scout"><b>Scout · 1</b>Learn a range.</button>
+  <button class="act" data-t="conserve"><b>Conserve prey · 1</b>Mend warrens here.</button>
+  <button class="act" data-t="breed"><b>Prioritise breeding · 2</b>Dens and extra care.</button>
+  <button class="act" data-t="expand"><b>Expand · 2</b>Claim a neighbour.</button>
+  <button class="act" data-t="relocate"><b>Relocate young · 1</b>Send a juvenile.</button>
+ </div>
+ <p class="muted">Chosen: ${G.acts.map(a=>a.t+(a.z?(' → '+Z[a.z].name):'')).join(', ')||'none'}</p>
+ <div class="row" style="margin-top:10px">
+  <button class="btn ghost" id="undo">Undo a plan</button>
+  <button class="btn gold" id="end">End season</button>
+ </div>
+ </div>`;
+ el.querySelector('#map').onclick=e=>{
+  const p=e.target.closest('[data-id]'); if(!p) return; const id=p.getAttribute('data-id');
+  if(G.pending){spend(G.pending,id); return} G.sel=id; draw();
+ };
+ el.querySelectorAll('.act').forEach(b=>b.onclick=()=>spend(b.getAttribute('data-t'), G.pending?null:G.sel));
+ el.querySelector('#undo').onclick=undo;
+ el.querySelector('#end').onclick=()=>{resolve(); draw()};
+}
+draw();
+</script>
+</body>
+</html>
